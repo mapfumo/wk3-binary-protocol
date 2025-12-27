@@ -144,7 +144,33 @@ Same dual-node setup from Week 2:
 - Immediate recovery on successful ACK reception
 - CRC validation: 100% of received packets validated successfully
 
-**Week 3 Status**: ✅ **COMPLETE** - All core objectives achieved, binary protocol operational with reliable delivery state machine.
+**Range Test Results (2025-12-27)**:
+
+| Distance | RSSI | SNR | Success Rate | Environment |
+|----------|------|-----|--------------|-------------|
+| 15m | -45 dBm | 13 dB | 100% | Through walls, no LoS |
+| 30m | -62 dBm | 13 dB | 99% | Wall obstacles |
+| 60m | -72 dBm | 12 dB | 99% | Wall obstacles |
+| 100m | -82 dBm | 11 dB | 99% | Downhill, trees, no LoS |
+| 150m | -91 dBm | 4 dB | 98% | Buildings & trees, no LoS |
+| 400m | -100 dBm | -2 dB | 98% | Buildings & trees, no LoS |
+| **600m** | **-107 dBm** | **-6 dB** | **95%** | **Buildings & trees, no LoS** |
+
+**Key Findings**:
+
+- ✅ **600m range achieved** through suburban obstacles (no line of sight)
+- ✅ **95% success rate at 600m** near LoRa sensitivity limit (-107 dBm)
+- ✅ **>98% success rate up to 400m** even with negative SNR
+- ✅ **LoRa spread spectrum works below noise floor** (functional at -6 dB SNR)
+- ✅ **Predictable signal degradation** (~10 dBm per doubling of distance)
+
+**Range Test Visualization**:
+
+![Range Test Results](range_test_results.png)
+
+*Graph shows RSSI, SNR, and packet loss vs distance. Generate with `python3 plot_range_test.py`*
+
+**Week 3 Status**: ✅ **COMPLETE** - All core objectives achieved, binary protocol operational with reliable delivery state machine, 600m range validated.
 
 ## Building
 

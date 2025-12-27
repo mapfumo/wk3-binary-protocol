@@ -593,5 +593,84 @@ fn tim2_handler(mut cx: tim2_handler::Context) {
 
 ---
 
-_Week 3 Notes - In Progress_
+## Range Testing Results
+
+### Test Date: 2025-12-27
+
+#### Test Environment
+- **Location**: Suburban residential area
+- **Weather**: Light clouds, 15°C
+- **Conditions**: No line of sight for most distances, buildings and trees in path
+- **Terrain**: Downhill from 100m onwards
+
+#### Measured Results
+
+| Distance | RSSI (dBm) | SNR (dB) | Packet Loss (%) | Environment Notes |
+|----------|------------|----------|-----------------|-------------------|
+| 15m | -45 | 13 | 0% | End of house (kitchen), wall obstacles, no LoS |
+| 30m | -62 | 13 | 1% | Verandah, wall obstacles |
+| 60m | -72 | 12 | 1% | Near driveway, wall obstacles |
+| 100m | -82 | 11 | 1% | Street junction, trees in street, downhill, no LoS |
+| 150m | -91 | 4 | 2% | Next street, trees & tall buildings, no LoS |
+| 400m | -100 | -2 | 2% | Another street, trees & tall buildings, no LoS |
+| 600m | -107 | -6 | 5% | Outside local church, no LoS |
+
+#### Key Observations
+
+**Signal Strength Degradation**:
+- RSSI degrades approximately 10 dBm per doubling of distance (textbook behavior)
+- At 600m: -107 dBm is near LoRa sensitivity limit (-110 to -120 dBm typical)
+- Signal propagation follows expected path loss model despite obstacles
+
+**SNR Performance**:
+- SNR remains healthy (>10 dB) up to 100m distance
+- SNR drops below 5 dB at 150m+ (noise floor increasing relative to signal)
+- **LoRa spread spectrum advantage**: Still functional with negative SNR (-2 dB at 400m, -6 dB at 600m)
+- Demonstrates LoRa's robustness in low SNR conditions
+
+**Packet Loss Analysis**:
+- 0-100m: Essentially perfect (0-1% loss = >99% success rate)
+- 150-400m: Excellent (2% loss = 98% success rate)
+- 600m: Very usable (5% loss = 95% success rate)
+- Earlier observed 70-80% success rate likely due to indoor RF interference, not range
+
+**Real-World Performance**:
+- ✅ **600m range achieved** through suburban obstacles (no line of sight)
+- ✅ **95% packet success rate at maximum tested distance**
+- ✅ **>98% success rate up to 400m** with negative SNR
+- ✅ **Predictable signal degradation** enables range estimation
+
+#### Technical Analysis
+
+**Why LoRa Works with Negative SNR**:
+- Chirp spread spectrum spreads signal across wide bandwidth
+- Processing gain recovers signal below noise floor
+- Forward error correction adds redundancy
+- Typical LoRa can achieve -7.5 to -20 dB SNR sensitivity depending on spreading factor
+
+**Estimated Maximum Range** (extrapolating from data):
+- Line of sight: Could potentially reach 1-2 km with same settings
+- Urban/suburban (obstructed): 600-800m practical limit
+- Sensitivity limit: ~-120 dBm → suggests 800-1000m maximum with obstacles
+
+**Configuration Used**:
+- Module: RYLR998 (868/915 MHz)
+- Spreading Factor: Default (likely SF7 or SF9)
+- Bandwidth: Default (likely 125 kHz)
+- Coding Rate: Default (likely 4/5)
+- Power: Default (likely +20 dBm)
+
+#### Portfolio Impact
+
+This data demonstrates:
+1. **Real-world validation** of LoRa performance in challenging environments
+2. **Predictable RF behavior** (path loss follows theory)
+3. **Robust communication** even with negative SNR
+4. **Production-ready reliability** (>95% success at 600m)
+
+**Comparable to industrial deployments** - many commercial LoRa sensors operate at similar success rates over comparable distances in urban environments.
+
+---
+
+_Week 3 Notes - Complete_
 _Part of 12-Week IIoT Systems Engineer Transition Plan_
