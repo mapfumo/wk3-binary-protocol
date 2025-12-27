@@ -74,52 +74,77 @@ Same dual-node setup from Week 2:
 
 ### Day 1: Binary Protocol Design
 
-- [ ] Define message types (Data, ACK, NACK)
-- [ ] Create Serde-compatible structs
-- [ ] Implement CRC-16 calculation
-- [ ] Design packet framing format
+- [x] Define message types (Data, ACK, NACK)
+- [x] Create Serde-compatible structs
+- [x] Implement CRC-16 calculation
+- [x] Design packet framing format
 
 ### Day 2: Postcard Integration
 
-- [ ] Integrate postcard serialization
-- [ ] Test serialization/deserialization on desktop
-- [ ] Port to embedded (no_std)
-- [ ] Measure serialized payload sizes
+- [x] Integrate postcard serialization
+- [x] Test serialization/deserialization on desktop
+- [x] Port to embedded (no_std)
+- [x] Measure serialized payload sizes
 
 ### Day 3: State Machine Implementation
 
-- [ ] Design TX state machine (Idle → Sending → WaitACK → Retry/Success)
-- [ ] Design RX state machine (Listen → Validate → SendACK)
-- [ ] Implement timeout handling
-- [ ] Add retry logic with backoff
+- [x] Design TX state machine (Idle → Sending → WaitACK → Retry/Success)
+- [x] Design RX state machine (Listen → Validate → SendACK)
+- [x] Implement timeout handling
+- [x] Add retry logic with backoff
 
 ### Day 4: Integration & Testing
 
-- [ ] Replace text protocol with binary in Node 1
-- [ ] Replace text parsing with binary in Node 2
-- [ ] End-to-end testing
-- [ ] Measure packet success rate
+- [x] Replace text protocol with binary in Node 1
+- [x] Replace text parsing with binary in Node 2
+- [x] End-to-end testing
+- [x] Measure packet success rate
 
 ### Day 5: Performance Analysis
 
-- [ ] Compare payload sizes (text vs binary)
-- [ ] Measure round-trip latency
-- [ ] Test retry behavior with packet loss
-- [ ] Document efficiency gains
+- [x] Compare payload sizes (text vs binary)
+- [x] Measure round-trip latency
+- [x] Test retry behavior with packet loss
+- [x] Document efficiency gains
 
 ### Day 6: Optimization & Edge Cases
 
-- [ ] Handle duplicate packets (sequence numbers)
-- [ ] Test boundary conditions
-- [ ] Optimize buffer sizes
-- [ ] Add comprehensive logging
+- [x] Handle duplicate packets (sequence numbers)
+- [x] Test boundary conditions
+- [x] Optimize buffer sizes
+- [x] Add comprehensive logging
 
 ### Day 7: Documentation & Review
 
-- [ ] Performance comparison report
-- [ ] Update PROTOCOL.md with binary format spec
-- [ ] Complete NOTES.md with learnings
-- [ ] Week 3 review and planning for Week 4
+- [x] Performance comparison report
+- [x] Update PROTOCOL.md with binary format spec
+- [x] Complete NOTES.md with learnings
+- [x] Week 3 review and planning for Week 4
+
+## Performance Results (Week 3 Complete)
+
+**Binary Protocol Efficiency**:
+
+- **Payload Size**: 10 bytes (8 data + 2 CRC) vs 25 bytes text = **60% reduction**
+- **Round-trip Latency**: <1 second (observed in successful transmissions)
+- **Timeout Behavior**: 2s × 3 attempts = 6 seconds total before giving up
+- **Success Rate**: 70-80% in real-world conditions (64+ packets tested)
+
+**State Machine Validation**:
+
+- ✅ Graceful timeout handling with configurable retry count (MAX_RETRIES = 3)
+- ✅ Automatic recovery when network conditions improve
+- ✅ No crashes or hangs on repeated failures
+- ✅ Clean state transitions (Idle ↔ WaitingForAck)
+
+**Real-World Testing**:
+
+- Tested with natural packet loss (packets #3, #4, #10, #13 failed during extended run)
+- System continued operating through failures
+- Immediate recovery on successful ACK reception
+- CRC validation: 100% of received packets validated successfully
+
+**Week 3 Status**: ✅ **COMPLETE** - All core objectives achieved, binary protocol operational with reliable delivery state machine.
 
 ## Building
 
