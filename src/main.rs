@@ -63,6 +63,21 @@ mod app {
     const MSG_TYPE_ACK: u8 = 1;
     const MSG_TYPE_NACK: u8 = 2;
 
+    // Transmission retry configuration
+    const MAX_RETRIES: u8 = 3;
+    const ACK_TIMEOUT_SECS: u32 = 2;  // Wait 2 seconds for ACK before retry
+
+    /// Transmission state for reliable delivery
+    #[derive(Debug, Clone, Copy, PartialEq)]
+    pub enum TxState {
+        Idle,                    // Waiting for next transmission trigger
+        WaitingForAck {          // Packet sent, waiting for ACK
+            seq_num: u16,        // Which packet we're waiting for
+            timeout_counter: u32, // Countdown in seconds until timeout
+            retry_count: u8,     // How many retries attempted so far
+        },
+    }
+
     /// Calculate CRC-16 checksum for data integrity
     /// Uses CRC-16-IBM-3740 (CCITT with 0xFFFF initial value)
     fn calculate_crc16(data: &[u8]) -> u16 {
@@ -157,6 +172,7 @@ mod app {
         display: LoraDisplay,
         sht31: SHT3x<I2cProxy, ShtDelay>,
         bme680: Bme680<I2cProxy, BmeDelay>,
+        tx_state: TxState,     // Transmission state machine (shared between tim2 and uart4)
     }
 
     #[local]
@@ -283,7 +299,13 @@ mod app {
         timer.listen(Event::Update);
 
         (
-            Shared { lora_uart, display, sht31, bme680 },
+            Shared {
+                lora_uart,
+                display,
+                sht31,
+                bme680,
+                tx_state: TxState::Idle,              // Start in Idle state
+            },
             Local {
                 led,
                 button,
@@ -297,10 +319,39 @@ mod app {
         )
     }
 
-    #[task(binds = TIM2, shared = [sht31, bme680, display, lora_uart], local = [led, button, timer, bme_delay, packet_counter, tx_countdown])]
+    #[task(binds = TIM2, shared = [sht31, bme680, display, lora_uart, tx_state], local = [led, button, timer, bme_delay, packet_counter, tx_countdown])]
     fn tim2_handler(mut cx: tim2_handler::Context) {
         cx.local.timer.clear_flags(stm32f4xx_hal::timer::Flag::Update);
         cx.local.led.toggle();
+
+        // State machine: Handle ACK timeout
+        cx.shared.tx_state.lock(|state| {
+            match *state {
+                TxState::WaitingForAck { seq_num, timeout_counter, retry_count } => {
+                    if timeout_counter > 0 {
+                        // Countdown timeout
+                        *state = TxState::WaitingForAck {
+                            seq_num,
+                            timeout_counter: timeout_counter - 1,
+                            retry_count,
+                        };
+                    } else {
+                        // Timeout reached!
+                        if retry_count < MAX_RETRIES {
+                            defmt::warn!("ACK timeout for packet #{}, retry {}/{}",
+                                seq_num, retry_count + 1, MAX_RETRIES);
+                            // Will retry in transmission logic below
+                        } else {
+                            defmt::error!("Max retries reached for packet #{}, giving up", seq_num);
+                            *state = TxState::Idle;
+                        }
+                    }
+                }
+                TxState::Idle => {
+                    // Normal operation
+                }
+            }
+        });
 
         // Determine if we should transmit this cycle
         let mut should_transmit = false;
@@ -325,8 +376,9 @@ mod app {
             }
         }
 
-        // Only read sensors and transmit if triggered
-        if should_transmit {
+        // Only read sensors and transmit if triggered AND in Idle state
+        let is_idle = cx.shared.tx_state.lock(|state| *state == TxState::Idle);
+        if should_transmit && is_idle {
             let delay = cx.local.bme_delay;
 
             cx.shared.bme680.lock(|bme| {
@@ -383,6 +435,9 @@ mod app {
                                 let _ = disp.flush();
                             });
 
+                            let current_seq = *cx.local.packet_counter as u16;
+                            let mut tx_success = false;
+
                             cx.shared.lora_uart.lock(|uart| {
                                 // === BINARY PROTOCOL ===
                                 // Convert to centidegrees and basis points for binary protocol
@@ -390,7 +445,7 @@ mod app {
                                 let humid_basis_points = (humid_pct * 100.0) as u16;
 
                                 let binary_packet = SensorDataPacket {
-                                    seq_num: *cx.local.packet_counter as u16,
+                                    seq_num: current_seq,
                                     temperature: temp_centidegrees,
                                     humidity: humid_basis_points,
                                     gas_resistance: gas,
@@ -436,13 +491,27 @@ mod app {
                                         let _ = nb::block!(uart.write(b'\n'));
 
                                         defmt::info!("Binary TX [{}]: {} bytes sent, packet #{}",
-                                            trigger_source, total_len, *cx.local.packet_counter);
+                                            trigger_source, total_len, current_seq);
+
+                                        tx_success = true;
                                     }
                                     Err(_) => {
                                         defmt::error!("Binary serialization failed!");
                                     }
                                 }
                             });
+
+                            // Transition to WaitingForAck state (outside uart lock)
+                            if tx_success {
+                                cx.shared.tx_state.lock(|state| {
+                                    *state = TxState::WaitingForAck {
+                                        seq_num: current_seq,
+                                        timeout_counter: ACK_TIMEOUT_SECS,
+                                        retry_count: 0,
+                                    };
+                                });
+                                defmt::info!("State: WaitingForAck ({}s timeout)", ACK_TIMEOUT_SECS);
+                            }
                         }
                     });
                 }
@@ -451,8 +520,11 @@ mod app {
     }
 
     // UART interrupt: Collect incoming bytes for ACK/NACK parsing
-    #[task(binds = UART4, shared = [lora_uart], local = [rx_buffer])]
+    #[task(binds = UART4, shared = [lora_uart, tx_state], local = [rx_buffer])]
     fn uart4_handler(mut cx: uart4_handler::Context) {
+        let mut ack_packet: Option<AckPacket> = None;
+
+        // Collect bytes and parse (inside uart lock)
         cx.shared.lora_uart.lock(|uart| {
             // Collect bytes into buffer
             while let Ok(byte) = uart.read() {
@@ -469,13 +541,7 @@ mod app {
                         defmt::info!("N1 UART: {} bytes received", cx.local.rx_buffer.len());
 
                         // Try to parse ACK/NACK
-                        if let Some(ack_pkt) = parse_ack_message(cx.local.rx_buffer.as_slice()) {
-                            if ack_pkt.msg_type == MSG_TYPE_ACK {
-                                defmt::info!("ACK received for packet #{}", ack_pkt.seq_num);
-                            } else if ack_pkt.msg_type == MSG_TYPE_NACK {
-                                defmt::warn!("NACK received for packet #{}", ack_pkt.seq_num);
-                            }
-                        }
+                        ack_packet = parse_ack_message(cx.local.rx_buffer.as_slice());
 
                         // Clear buffer for next message
                         cx.local.rx_buffer.clear();
@@ -493,5 +559,46 @@ mod app {
                     sr.ore().bit_is_set(), sr.nf().bit_is_set(), sr.fe().bit_is_set());
             }
         });
+
+        // Handle ACK/NACK state transitions (outside uart lock)
+        if let Some(ack_pkt) = ack_packet {
+            if ack_pkt.msg_type == MSG_TYPE_ACK {
+                defmt::info!("ACK received for packet #{}", ack_pkt.seq_num);
+
+                // Check if this ACK matches what we're waiting for
+                cx.shared.tx_state.lock(|state| {
+                    if let TxState::WaitingForAck { seq_num, .. } = *state {
+                        if ack_pkt.seq_num == seq_num {
+                            defmt::info!("State: Idle (ACK matched, transmission successful)");
+                            *state = TxState::Idle;
+                        } else {
+                            defmt::warn!("ACK seq mismatch: expected {}, got {}", seq_num, ack_pkt.seq_num);
+                        }
+                    }
+                });
+            } else if ack_pkt.msg_type == MSG_TYPE_NACK {
+                defmt::warn!("NACK received for packet #{}", ack_pkt.seq_num);
+
+                // NACK means CRC failed - should retry
+                cx.shared.tx_state.lock(|state| {
+                    if let TxState::WaitingForAck { seq_num, retry_count, .. } = *state {
+                        if ack_pkt.seq_num == seq_num {
+                            if retry_count < MAX_RETRIES {
+                                defmt::warn!("Will retry packet #{}", seq_num);
+                                // Reset timeout for retry
+                                *state = TxState::WaitingForAck {
+                                    seq_num,
+                                    timeout_counter: 0, // Trigger immediate retry
+                                    retry_count: retry_count + 1,
+                                };
+                            } else {
+                                defmt::error!("Max retries reached after NACK");
+                                *state = TxState::Idle;
+                            }
+                        }
+                    }
+                });
+            }
+        }
     }
 }

@@ -1,11 +1,12 @@
 # Week 3: Binary Protocol & State Machine
 
-![Week 3](wk3_image.png)
+![Week 3](image.png)
 STM32F446RE-based LoRa sensor network with binary serialization, CRC integrity checking, and reliable transmission state machine.
 
 ## Overview
 
 This repository builds on Week 2's text-based LoRa communication to implement a production-grade binary protocol with:
+
 - **Postcard serialization** for efficient binary encoding
 - **CRC-16 integrity checking** for data validation
 - **ACK/retry state machine** for reliable delivery
@@ -15,6 +16,7 @@ This repository builds on Week 2's text-based LoRa communication to implement a 
 ## What's New in Week 3
 
 ### From Week 2 (Text Protocol)
+
 ```
 Payload: "T:27.1H:56.0G:74721#0003" (24 bytes)
 AT Command: "AT+SEND=2,24,T:27.1H:56.0G:74721#0003" (39 bytes total)
@@ -22,6 +24,7 @@ No integrity checking, no acknowledgments, no retries
 ```
 
 ### Week 3 (Binary Protocol)
+
 ```
 Payload: Binary struct (12-16 bytes) + CRC-16 (2 bytes)
 Transmission: Automatic retries on failure
@@ -70,42 +73,49 @@ Same dual-node setup from Week 2:
 ## Week 3 Objectives
 
 ### Day 1: Binary Protocol Design
+
 - [ ] Define message types (Data, ACK, NACK)
 - [ ] Create Serde-compatible structs
 - [ ] Implement CRC-16 calculation
 - [ ] Design packet framing format
 
 ### Day 2: Postcard Integration
+
 - [ ] Integrate postcard serialization
 - [ ] Test serialization/deserialization on desktop
 - [ ] Port to embedded (no_std)
 - [ ] Measure serialized payload sizes
 
 ### Day 3: State Machine Implementation
+
 - [ ] Design TX state machine (Idle → Sending → WaitACK → Retry/Success)
 - [ ] Design RX state machine (Listen → Validate → SendACK)
 - [ ] Implement timeout handling
 - [ ] Add retry logic with backoff
 
 ### Day 4: Integration & Testing
+
 - [ ] Replace text protocol with binary in Node 1
 - [ ] Replace text parsing with binary in Node 2
 - [ ] End-to-end testing
 - [ ] Measure packet success rate
 
 ### Day 5: Performance Analysis
+
 - [ ] Compare payload sizes (text vs binary)
 - [ ] Measure round-trip latency
 - [ ] Test retry behavior with packet loss
 - [ ] Document efficiency gains
 
 ### Day 6: Optimization & Edge Cases
+
 - [ ] Handle duplicate packets (sequence numbers)
 - [ ] Test boundary conditions
 - [ ] Optimize buffer sizes
 - [ ] Add comprehensive logging
 
 ### Day 7: Documentation & Review
+
 - [ ] Performance comparison report
 - [ ] Update PROTOCOL.md with binary format spec
 - [ ] Complete NOTES.md with learnings
@@ -114,11 +124,13 @@ Same dual-node setup from Week 2:
 ## Building
 
 ### Build Node 1 (Sensor Node)
+
 ```bash
 cargo build --release
 ```
 
 ### Build Node 2 (Gateway)
+
 ```bash
 cargo build --release --bin node2
 ```
@@ -126,11 +138,13 @@ cargo build --release --bin node2
 ## Flashing
 
 ### Flash Node 1
+
 ```bash
 cargo build --release && probe-rs run --probe 0483:374b:0671FF3833554B3043164817 --chip STM32F446RETx target/thumbv7em-none-eabihf/release/wk3-binary-protocol
 ```
 
 ### Flash Node 2
+
 ```bash
 cargo build --release --bin node2 && probe-rs run --probe 0483:374b:066DFF3833584B3043115433 --chip STM32F446RETx target/thumbv7em-none-eabihf/release/node2
 ```
@@ -174,6 +188,7 @@ pub struct SensorDataPacket {
 ```
 
 **Example SensorDataPacket**:
+
 - Length: 1 byte (e.g., 14)
 - Type: 1 byte (0x01 = SensorData)
 - Sequence: 2 bytes (u16)
@@ -220,6 +235,7 @@ wk3-binary-protocol/
 ## Success Criteria
 
 Week 3 Complete When:
+
 - [ ] Binary protocol replaces text protocol
 - [ ] CRC validation working on every packet
 - [ ] ACK/NACK mechanism implemented
@@ -232,6 +248,7 @@ Week 3 Complete When:
 ## Foundation from Week 2
 
 This repository starts with the working Week 2 codebase:
+
 - ✅ Multi-sensor integration (BME680 + SHT31-D)
 - ✅ Shared I2C bus with mutex management
 - ✅ OLED display with sensor data
