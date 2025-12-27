@@ -336,13 +336,19 @@ mod app {
                             retry_count,
                         };
                     } else {
-                        // Timeout reached!
-                        if retry_count < MAX_RETRIES {
-                            defmt::warn!("ACK timeout for packet #{}, retry {}/{}",
-                                seq_num, retry_count + 1, MAX_RETRIES);
-                            // Will retry in transmission logic below
+                        // Timeout reached - count it as a retry
+                        let new_retry_count = retry_count + 1;
+                        if new_retry_count < MAX_RETRIES {
+                            defmt::warn!("ACK timeout for packet #{}, attempt {}/{}, will keep waiting",
+                                seq_num, new_retry_count + 1, MAX_RETRIES);
+                            // Keep waiting with incremented retry counter and reset timeout
+                            *state = TxState::WaitingForAck {
+                                seq_num,
+                                timeout_counter: ACK_TIMEOUT_SECS,
+                                retry_count: new_retry_count,
+                            };
                         } else {
-                            defmt::error!("Max retries reached for packet #{}, giving up", seq_num);
+                            defmt::error!("Max retries ({}) exceeded for packet #{}, giving up", MAX_RETRIES, seq_num);
                             *state = TxState::Idle;
                         }
                     }

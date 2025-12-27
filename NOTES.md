@@ -336,10 +336,71 @@ Node 2 (Receiver):
 
 **Next Steps**:
 
-- Test timeout behavior (power off Node 2 to force retries)
-- Test NACK handling (inject CRC errors on Node 2)
-- Test max retry limit (verify "giving up" after 3 retries)
-- Measure retry latency and success rate
+- ✅ Test timeout behavior (COMPLETED - see below)
+- ✅ Test max retry limit (COMPLETED - verified "giving up" after 3 retries)
+- ⏭️ Test NACK handling (inject CRC errors on Node 2)
+- ⏭️ Performance analysis and final documentation
+
+---
+
+#### Timeout/Retry Testing Results
+
+**Test Setup**: Changed Node 2 to different LoRa network ID (99 vs 18) to prevent communication
+
+**Actual Log from Node 1** (No ACKs received):
+
+```
+[INFO] Binary TX [AUTO]: 10 bytes sent, packet #1
+[INFO] State: WaitingForAck (2s timeout)
+[INFO] N1 UART: 5 bytes received                           ← LoRa "+OK" response, not an ACK
+[WARN] ACK timeout for packet #1, attempt 2/3, will keep waiting
+[WARN] ACK timeout for packet #1, attempt 3/3, will keep waiting
+[ERROR] Max retries (3) exceeded for packet #1, giving up  ← State machine gives up!
+[INFO] Auto-transmit countdown reached 0
+[INFO] Binary TX [AUTO]: 10 bytes sent, packet #2          ← Continues with next packet
+[INFO] State: WaitingForAck (2s timeout)
+[INFO] N1 UART: 5 bytes received
+[WARN] ACK timeout for packet #2, attempt 2/3, will keep waiting
+```
+
+**Timeout Behavior Verified**:
+
+- ✅ Each timeout period = 2 seconds (configurable via `ACK_TIMEOUT_SECS`)
+- ✅ Retry count increments correctly (0 → 1 → 2 → 3)
+- ✅ After 3 attempts (total ~6 seconds), state transitions to Idle
+- ✅ System continues operating (sends packet #2, #3, etc.)
+- ✅ No crashes or hangs - graceful degradation
+
+**Recovery Testing**: Restored Node 2 to network 18
+
+```log
+[INFO] Binary TX [AUTO]: 10 bytes sent, packet #6
+[INFO] State: WaitingForAck (2s timeout)
+[INFO] N1 UART: 5 bytes received
+[INFO] N1 UART: 20 bytes received                          ← ACK received!
+[INFO] ACK received for packet #6
+[INFO] State: Idle (ACK matched, transmission successful)  ← Recovery successful!
+```
+
+**Recovery Verified**:
+
+- ✅ System immediately resumes normal operation when Node 2 returns
+- ✅ No state corruption or stuck conditions
+- ✅ Packet sequence numbers continue correctly (#6, #7, #8...)
+
+**Key Findings**:
+
+1. **Timeout Implementation Works Correctly**: The 1Hz timer counts down `timeout_counter` from 2→1→0, then increments `retry_count`
+2. **Max Retry Limit Enforced**: After 3 attempts, ERROR log appears and state → Idle
+3. **Graceful Degradation**: System doesn't block or crash on communication failure
+4. **Fast Recovery**: When link restored, next transmission immediately succeeds
+5. **Total Timeout Duration**: ~6 seconds (3 attempts × 2s) before giving up
+
+**What We Learned**:
+
+- **Design Limitation**: Current implementation doesn't actually retransmit the same packet - it just waits longer. True packet retransmission would require storing the serialized packet.
+- **Pragmatic Choice**: For sensor data that changes every 10 seconds, "giving up and sending fresh data" is acceptable behavior.
+- **Future Enhancement**: Could add packet buffer to retransmit exact same data if needed for critical telemetry.
 
 ---
 
